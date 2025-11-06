@@ -1,0 +1,19 @@
+﻿# Core Dependencies (Windows-compatible)
+moviepy>=1.0.3
+pydub>=0.25.1
+librosa>=0.10.1
+speechrecognition>=3.10.0
+customtkinter>=5.2.0
+tkinterweb>=3.1.0
+Pillow>=10.1.0
+webvtt-py>=0.4.6
+pysrt>=1.1.2
+numpy>=1.24.3
+pandas>=2.0.3
+click>=8.1.7
+
+# Alternative STT - we'll use this instead of pocketsphinx
+openai-whisper>=20231117
+
+# Audio backend for pydub
+ffmpeg-python>=0.2.0

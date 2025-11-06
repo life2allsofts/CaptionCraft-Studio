@@ -1,0 +1,16 @@
+﻿{
+    "app": {
+        "name": "CaptionCraft Studio",
+        "version": "1.0.0",
+        "author": "Tetteh-Kofi (Isaac Tetteh-Apotey)"
+    },
+    "default_styles": {
+        "font_family": "Arial",
+        "font_size": "24px",
+        "text_color": "#FFFFFF",
+        "background_color": "#000000",
+        "highlight_color": "#FFD700"
+    },
+    "subtitle_modes": ["block", "word_by_word", "karaoke"],
+    "supported_formats": ["vtt", "srt", "sbv", "txt"]
+}
