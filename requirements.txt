@@ -22,3 +22,7 @@ ffmpeg-python>=0.2.0
 moviepy>=1.0.3
 SpeechRecognition>=3.10.0
 pydub>=0.25.1
+
+# Video preview enhancements (optional for future)
+# vlc-python>=3.0.18121  # For embedded video player
+# pygame>=2.5.0          # Alternative video playback

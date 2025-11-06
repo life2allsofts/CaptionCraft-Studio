@@ -14,6 +14,7 @@ Key Features:
 - Component-based UI architecture
 - Centralized application state management
 - AI media transcription capabilities
+- Video preview with subtitle synchronization
 """
 
 import tkinter as tk
@@ -21,7 +22,7 @@ import customtkinter as ctk
 import os
 import sys
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 # Add the project root to Python path for cross-module imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -35,6 +36,7 @@ if TYPE_CHECKING:
     from ui.components.editor_tab import EditorTab as EditorTabType
     from ui.components.styling_tab import StylingTab as StylingTabType
     from ui.components.preview_tab import PreviewTab as PreviewTabType
+    from ui.components.video_preview_tab import VideoPreviewTab as VideoPreviewTabType
     from ui.components.status_bar import StatusBar as StatusBarType
     from ui.dialogs.file_dialogs import FileDialogs as FileDialogsType
     from core.vtt_engine.vtt_generator import VTTGenerator as VTTGeneratorType
@@ -50,6 +52,14 @@ try:
     from ui.components.preview_tab import PreviewTab
     from ui.components.status_bar import StatusBar
     from ui.dialogs.file_dialogs import FileDialogs
+    
+    # Try to import VideoPreviewTab, but provide fallback if not available
+    try:
+        from ui.components.video_preview_tab import VideoPreviewTab
+        VIDEO_PREVIEW_AVAILABLE = True
+    except ImportError:
+        VIDEO_PREVIEW_AVAILABLE = False
+        print("⚠️ VideoPreviewTab not available, continuing without video preview")
     
     print("✅ All imports successful")
     
@@ -93,6 +103,14 @@ except ImportError as e:
         
         def update_preview(self, content: str):
             pass
+        
+    class VideoPreviewTab:
+        def __init__(self, notebook, app):
+            self.notebook = notebook
+            self.app = app
+        
+        def update_preview(self, video_path: Optional[str] = None, vtt_content: Optional[str] = None):
+            pass
     
     class StatusBar:
         def __init__(self, parent, app):
@@ -120,6 +138,8 @@ except ImportError as e:
     class FileDialogs:
         def __init__(self, app):
             self.app = app
+    
+    VIDEO_PREVIEW_AVAILABLE = True
 
 
 class CaptionCraftStudio(ctk.CTk):
@@ -135,6 +155,7 @@ class CaptionCraftStudio(ctk.CTk):
     - Component lifecycle management
     - Application state persistence
     - AI media transcription
+    - Video preview with subtitle synchronization
     """
     
     def __init__(self):
@@ -161,6 +182,7 @@ class CaptionCraftStudio(ctk.CTk):
         self.editor_tab: Any = None
         self.styling_tab: Any = None
         self.preview_tab: Any = None
+        self.video_preview_tab: Any = None
         self.notebook: Any = None
         self.main_frame: Any = None
         
@@ -219,10 +241,7 @@ class CaptionCraftStudio(ctk.CTk):
     
     def setup_main_content(self):
         """
-        Setup the main content area with tabbed interface.
-        
-        Creates the notebook (tab container) and initializes all tab
-        components for organized feature access.
+        Setup the main content area with tabs including video preview.
         """
         content_frame = ctk.CTkFrame(self.main_frame)
         content_frame.pack(fill="both", expand=True, padx=10, pady=10)
@@ -231,10 +250,14 @@ class CaptionCraftStudio(ctk.CTk):
         self.notebook = ctk.CTkTabview(content_frame)
         self.notebook.pack(fill="both", expand=True)
         
-        # Initialize tab components
+        # Initialize tab components - including video preview
         self.editor_tab = EditorTab(self.notebook, self)
         self.styling_tab = StylingTab(self.notebook, self)
         self.preview_tab = PreviewTab(self.notebook, self)
+        
+        # Add video preview tab if available
+        if VIDEO_PREVIEW_AVAILABLE:
+            self.video_preview_tab = VideoPreviewTab(self.notebook, self)
     
     def load_config(self):
         """
@@ -313,6 +336,10 @@ class CaptionCraftStudio(ctk.CTk):
             content (str): Content to display in preview tab
         """
         self.preview_tab.update_preview(content)
+        
+        # Also update video preview if available
+        if hasattr(self, 'video_preview_tab') and self.video_preview_tab:
+            self.video_preview_tab.update_preview(vtt_content=content)
 
     def process_media_file(self, file_path: str):
         """
@@ -343,6 +370,10 @@ class CaptionCraftStudio(ctk.CTk):
                         vtt_content = self._convert_whisper_to_vtt(result["segments"])
                         self.set_subtitle_text(vtt_content)
                         self.update_preview(vtt_content)
+                        
+                        # Update video preview with the loaded video
+                        if hasattr(self, 'video_preview_tab') and self.video_preview_tab:
+                            self.video_preview_tab.update_preview(video_path=file_path, vtt_content=vtt_content)
                         
                         self.status_bar.show_success(
                             f"AI transcription complete: {len(result['segments'])} timed segments"
@@ -375,6 +406,10 @@ class CaptionCraftStudio(ctk.CTk):
             # Load into editor
             self.set_subtitle_text(vtt_content)
             self.update_preview(vtt_content)
+            
+            # Update video preview with the loaded video
+            if hasattr(self, 'video_preview_tab') and self.video_preview_tab:
+                self.video_preview_tab.update_preview(video_path=file_path, vtt_content=vtt_content)
             
             self.status_bar.show_success(f"Transcription complete: {len(transcription)} characters")
             
