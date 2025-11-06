@@ -1,5 +1,10 @@
 """
 Header Component for CaptionCraft Studio
+
+Module: header.py
+Description: Application header with title, menu buttons, and theme controls.
+Author: Tetteh-Kofi (Isaac Tetteh-Apotey)
+Version: 1.0.0
 """
 
 import customtkinter as ctk
@@ -43,18 +48,31 @@ class HeaderComponent:
         menu_frame = ctk.CTkFrame(parent)
         menu_frame.pack(side="right", padx=10, pady=5)
         
-        new_btn = ctk.CTkButton(menu_frame, text="New", command=self.new_project)
-        new_btn.pack(side="left", padx=5)
+        # Theme toggle button
+        theme_btn = ctk.CTkButton(
+            menu_frame, 
+            text="🌓 Theme", 
+            command=self.toggle_theme,
+            width=80
+        )
+        theme_btn.pack(side="left", padx=2)
         
-        open_btn = ctk.CTkButton(menu_frame, text="Open", command=self.open_file)
-        open_btn.pack(side="left", padx=5)
+        new_btn = ctk.CTkButton(menu_frame, text="New", command=self.new_project, width=60)
+        new_btn.pack(side="left", padx=2)
         
-        save_btn = ctk.CTkButton(menu_frame, text="Save", command=self.save_file)
-        save_btn.pack(side="left", padx=5)
+        open_btn = ctk.CTkButton(menu_frame, text="Open", command=self.open_file, width=60)
+        open_btn.pack(side="left", padx=2)
+        
+        save_btn = ctk.CTkButton(menu_frame, text="Save", command=self.save_file, width=60)
+        save_btn.pack(side="left", padx=2)
         
         # Add more buttons as needed
-        settings_btn = ctk.CTkButton(menu_frame, text="Settings", command=self.open_settings)
-        settings_btn.pack(side="left", padx=5)
+        settings_btn = ctk.CTkButton(menu_frame, text="Settings", command=self.open_settings, width=70)
+        settings_btn.pack(side="left", padx=2)
+    
+    def toggle_theme(self):
+        """Toggle between dark and light themes"""
+        self.app.toggle_theme()
     
     def new_project(self):
         """Handle new project creation"""
