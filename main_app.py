@@ -1,22 +1,3 @@
-
-# =============================================================================
-# PYLANCE CONFIGURATION
-# =============================================================================
-# These directives suppress false positive warnings from Pylance static analysis
-# while maintaining full runtime functionality. The application imports work
-# correctly at runtime through dynamic path modification.
-#
-# pyright: reportMissingImports=false  
-# pyright: reportAttributeAccessIssue=false
-# pyright: reportAssignmentType=false   
-# pyright: reportUnusedImport=false      
-#
-# Note: These are development-time only and don't affect runtime performance.
-# =============================================================================
-# pyright: reportMissingImports=false
-# pyright: reportAttributeAccessIssue=false
-# pyright: reportAssignmentType=false
-# pyright: reportUnusedImport=false
 """
 CaptionCraft Studio - Main Application Entry Point
 Refactored to be minimal and delegate to components
@@ -32,6 +13,7 @@ Key Features:
 - Proper window positioning above taskbar
 - Component-based UI architecture
 - Centralized application state management
+- AI media transcription capabilities
 """
 
 import tkinter as tk
@@ -118,6 +100,12 @@ except ImportError as e:
         
         def update_status(self, message: str):
             print(f"Status: {message}")
+        
+        def show_progress(self):
+            print("Progress started")
+        
+        def hide_progress(self):
+            print("Progress ended")
     
     class FileDialogs:
         def __init__(self, app):
@@ -136,6 +124,7 @@ class CaptionCraftStudio(ctk.CTk):
     - Smart window positioning above taskbar
     - Component lifecycle management
     - Application state persistence
+    - AI media transcription
     """
     
     def __init__(self):
@@ -314,6 +303,85 @@ class CaptionCraftStudio(ctk.CTk):
             content (str): Content to display in preview tab
         """
         self.preview_tab.update_preview(content)
+
+    def process_media_file(self, file_path: str):
+        """
+        Process media file for AI transcription.
+        
+        Args:
+            file_path (str): Path to media file to process
+        """
+        try:
+            self.status_bar.update_status(f"Processing media: {os.path.basename(file_path)}")
+            self.status_bar.show_progress()
+            
+            # Initialize audio processor
+            from core.audio_processor.unified_processor import UnifiedAudioProcessor
+            processor = UnifiedAudioProcessor()
+            
+            # Check if AI transcription is available
+            if not processor.get_status()["whisper_available"]:
+                self.status_bar.update_status("AI transcription not available. Install whisper.")
+                return
+            
+            # Process the media file
+            self.status_bar.update_status("AI transcribing media...")
+            result = processor.transcribe_media(file_path)
+            
+            if result["success"]:
+                # Convert segments to subtitle format
+                subtitle_content = self._convert_whisper_to_vtt(result["segments"])
+                self.set_subtitle_text(subtitle_content)
+                self.status_bar.update_status(f"AI transcription complete: {len(result['segments'])} segments")
+            else:
+                self.status_bar.update_status(f"Transcription failed: {result.get('error', 'Unknown error')}")
+                
+        except Exception as e:
+            self.status_bar.update_status(f"Media processing error: {e}")
+        finally:
+            self.status_bar.hide_progress()
+            if 'processor' in locals():
+                processor.cleanup()
+
+    def _convert_whisper_to_vtt(self, segments: list) -> str:
+        """
+        Convert Whisper segments to VTT format.
+        
+        Args:
+            segments (list): Whisper transcription segments
+            
+        Returns:
+            str: VTT formatted subtitles
+        """
+        vtt_content = "WEBVTT\n\n"
+        
+        for i, segment in enumerate(segments, 1):
+            start = self._format_timestamp(segment["start"])
+            end = self._format_timestamp(segment["end"])
+            text = segment["text"].strip()
+            
+            vtt_content += f"{i}\n"
+            vtt_content += f"{start} --> {end}\n"
+            vtt_content += f"{text}\n\n"
+        
+        return vtt_content
+
+    def _format_timestamp(self, seconds: float) -> str:
+        """
+        Format seconds to VTT timestamp.
+        
+        Args:
+            seconds (float): Time in seconds
+            
+        Returns:
+            str: Formatted timestamp (HH:MM:SS.mmm)
+        """
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        seconds_remaining = seconds % 60
+        milliseconds = int((seconds_remaining - int(seconds_remaining)) * 1000)
+        
+        return f"{hours:02d}:{minutes:02d}:{int(seconds_remaining):02d}.{milliseconds:03d}"
     
     def center_window(self):
         """
@@ -366,6 +434,25 @@ def main():
             # Fallback if even error dialog fails
             print("Additional error showing error dialog")
 
+
+# =============================================================================
+# PYLANCE CONFIGURATION
+# =============================================================================
+# These directives suppress false positive warnings from Pylance static analysis
+# while maintaining full runtime functionality. The application imports work
+# correctly at runtime through dynamic path modification.
+#
+# pyright: reportMissingImports=false  
+# pyright: reportAttributeAccessIssue=false
+# pyright: reportAssignmentType=false   
+# pyright: reportUnusedImport=false      
+#
+# Note: These are development-time only and don't affect runtime performance.
+# =============================================================================
+# pyright: reportMissingImports=false
+# pyright: reportAttributeAccessIssue=false
+# pyright: reportAssignmentType=false
+# pyright: reportUnusedImport=false
 
 # Application entry point
 if __name__ == "__main__":

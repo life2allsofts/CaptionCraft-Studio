@@ -48,6 +48,15 @@ class HeaderComponent:
         menu_frame = ctk.CTkFrame(parent)
         menu_frame.pack(side="right", padx=10, pady=5)
         
+        # Import Media button
+        import_btn = ctk.CTkButton(
+            menu_frame, 
+            text="🎬 Import Media", 
+            command=self.import_media,
+            width=100
+        )
+        import_btn.pack(side="left", padx=2)
+        
         # Theme toggle button
         theme_btn = ctk.CTkButton(
             menu_frame, 
@@ -69,6 +78,12 @@ class HeaderComponent:
         # Add more buttons as needed
         settings_btn = ctk.CTkButton(menu_frame, text="Settings", command=self.open_settings, width=70)
         settings_btn.pack(side="left", padx=2)
+    
+    def import_media(self):
+        """Handle media file import for AI transcription"""
+        file_path = self.app.file_dialogs.import_media_file()
+        if file_path:
+            self.app.process_media_file(file_path)
     
     def toggle_theme(self):
         """Toggle between dark and light themes"""

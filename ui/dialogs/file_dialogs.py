@@ -38,18 +38,16 @@ class FileDialogs:
             ]
         )
     
-    def export_file(self) -> str:
-        """Export file dialog"""
-        return filedialog.asksaveasfilename(
-            title="Export Subtitle File",
-            defaultextension=".vtt",
-            filetypes=[
-                ("WebVTT files", "*.vtt"),
-                ("SubRip files", "*.srt"),
-                ("Text files", "*.txt"),
-                ("All files", "*.*")
-            ]
-        )
+    def import_media_file(self) -> str:
+        """Import media file dialog for video/audio files"""
+        return filedialog.askopenfilename(
+        title="Import Media File",
+        filetypes=[
+            ("Video files", "*.mp4 *.avi *.mov *.mkv *.wmv"),
+            ("Audio files", "*.wav *.mp3 *.m4a *.flac"),
+            ("All files", "*.*")
+        ]
+    )
     
     def load_file_content(self, file_path: str) -> str:
         """Load content from file"""

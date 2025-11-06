@@ -17,3 +17,8 @@ openai-whisper>=20231117
 
 # Audio backend for pydub
 ffmpeg-python>=0.2.0
+
+# Phase 2: Audio/Video Processing
+moviepy>=1.0.3
+SpeechRecognition>=3.10.0
+pydub>=0.25.1
