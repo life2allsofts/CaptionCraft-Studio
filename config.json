@@ -4,6 +4,11 @@
         "version": "1.0.0",
         "author": "Tetteh-Kofi (Isaac Tetteh-Apotey)"
     },
+    "ui": {
+        "theme": "dark",
+        "language": "en",
+        "font_size": 12
+    },
     "default_styles": {
         "font_family": "Arial",
         "font_size": "24px",
@@ -12,5 +17,6 @@
         "highlight_color": "#FFD700"
     },
     "subtitle_modes": ["block", "word_by_word", "karaoke"],
-    "supported_formats": ["vtt", "srt", "sbv", "txt"]
+    "supported_formats": ["vtt", "srt", "sbv", "txt"],
+    "recent_files": []
 }

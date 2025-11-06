@@ -1,0 +1,45 @@
+WEBVTT
+
+STYLE
+::highlight {
+  color: #FFD700;
+  font-weight: bold;
+}
+::normal {
+  color: #FFFFFF;
+  font-family: Arial;
+  font-size: 24px;
+}
+
+1
+00:00:01.000 --> 00:00:04.000
+<c.normal>Welcome to CaptionCraft Studio</c>
+
+2
+00:00:05.000 --> 00:00:08.000
+<c.highlight>Advanced subtitle generation</c>
+
+3
+00:00:10.000 --> 00:00:10.833
+This
+
+4
+00:00:10.833 --> 00:00:11.666
+is
+
+5
+00:00:11.666 --> 00:00:12.499
+word
+
+6
+00:00:12.499 --> 00:00:13.333
+by
+
+7
+00:00:13.333 --> 00:00:14.166
+word
+
+8
+00:00:14.166 --> 00:00:14.999
+timing
+
