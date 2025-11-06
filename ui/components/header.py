@@ -8,6 +8,7 @@ Version: 1.0.0
 """
 
 import customtkinter as ctk
+import os
 from utils.config_manager import config_manager
 
 
@@ -80,10 +81,18 @@ class HeaderComponent:
         settings_btn.pack(side="left", padx=2)
     
     def import_media(self):
-        """Handle media file import for AI transcription"""
-        file_path = self.app.file_dialogs.import_media_file()
-        if file_path:
-            self.app.process_media_file(file_path)
+        """Handle media file import with better error handling"""
+        try:
+            file_path = self.app.file_dialogs.import_media_file()
+            if file_path:
+                # Show immediate feedback
+                self.app.status_bar.update_status(f"Processing: {os.path.basename(file_path)}")
+                
+                # Process the media file
+                self.app.process_media_file(file_path)
+                
+        except Exception as e:
+            self.app.status_bar.show_error(f"Import failed: {e}")
     
     def toggle_theme(self):
         """Toggle between dark and light themes"""

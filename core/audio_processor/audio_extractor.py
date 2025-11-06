@@ -1,17 +1,13 @@
-# pyright: reportMissingImports=false
-# pyright: reportAttributeAccessIssue=false
-# pyright: reportAssignmentType=false
-# pyright: reportUnusedImport=false
-
 """
-Audio Processor for CaptionCraft Studio
-Fixed version with proper file handling
+Audio Extractor for CaptionCraft Studio
+Fixed version with proper file handling and Whisper optimization
 """
 
 import os
 import tempfile
 import sys
-from typing import Optional, Tuple
+import uuid
+from typing import Optional
 
 # Add project root to path for imports
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -21,7 +17,7 @@ if project_root not in sys.path:
 try:
     from moviepy.editor import VideoFileClip
     import speech_recognition as sr
-    print("✅ Audio processor dependencies loaded successfully")
+    print("✅ Audio extractor dependencies loaded successfully")
     MOVIEPY_AVAILABLE = True
     SPEECHRECOGNITION_AVAILABLE = True
 except ImportError as e:
@@ -34,7 +30,7 @@ except ImportError as e:
 
 class AudioExtractor:
     """
-    Fixed audio extractor with proper file handling.
+    Fixed audio extractor with proper file handling and Whisper optimization.
     """
     
     def __init__(self):
@@ -77,13 +73,13 @@ class AudioExtractor:
                 raise ImportError("MoviePy's VideoFileClip is not available")
                 
             # Load video and extract audio
-            with VideoFileClip(video_path) as video:
+            video = VideoFileClip(video_path)
+            try:
                 print(f"📊 Video loaded: {video.duration:.2f}s duration")
                 
                 audio = video.audio
                 if audio is None:
                     raise ValueError("No audio track found in video file")
-                
                 print(f"🔊 Audio track found: {audio.duration:.2f}s")
                 print(f"💾 Writing audio to: {output_audio_path}")
                 
@@ -94,7 +90,10 @@ class AudioExtractor:
                     logger=None,
                     fps=44100  # Standard audio sample rate
                 )
+            finally:
+                video.close()
                 
+            # Verify the file was created
             # Verify the file was created
             if os.path.exists(output_audio_path):
                 file_size = os.path.getsize(output_audio_path)
@@ -106,6 +105,57 @@ class AudioExtractor:
         except Exception as e:
             # Clean up on error
             self.cleanup()
+            raise e
+
+    def extract_audio_for_whisper(self, video_path: str) -> str:
+        """
+        Extract audio specifically optimized for Whisper transcription.
+        Uses higher quality settings and ensures proper format.
+        """
+        if not MOVIEPY_AVAILABLE:
+            raise ValueError("MoviePy not available. Install moviepy.")
+        
+        # Create temp directory for whisper audio
+        whisper_temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "whisper_audio")
+        os.makedirs(whisper_temp_dir, exist_ok=True)
+        
+        # Create a more persistent temp file
+        temp_filename = f"whisper_{uuid.uuid4().hex}.wav"
+        output_audio_path = os.path.join(whisper_temp_dir, temp_filename)
+        
+        print(f"🔊 Extracting audio for Whisper: {video_path}")
+        
+        try:
+            with VideoFileClip(video_path) as video:
+                audio = video.audio
+                if audio is None:
+                    raise ValueError("No audio track found in video file")
+                
+                print(f"💾 Writing high-quality audio for Whisper...")
+                # Use higher quality settings for better transcription
+                audio.write_audiofile(
+                    output_audio_path, 
+                    verbose=False, 
+                    logger=None,
+                    fps=16000,  # Whisper prefers 16kHz
+                    ffmpeg_params=['-ac', '1']  # Mono audio for Whisper
+                )
+                
+            # Verify the file was created properly
+            if os.path.exists(output_audio_path) and os.path.getsize(output_audio_path) > 0:
+                print(f"✅ Whisper-ready audio created: {output_audio_path}")
+                self.temp_files.append(output_audio_path)
+                return output_audio_path
+            else:
+                raise Exception("Whisper audio file was not created properly")
+                
+        except Exception as e:
+            # Clean up on error
+            if os.path.exists(output_audio_path):
+                try:
+                    os.unlink(output_audio_path)
+                except:
+                    pass
             raise e
     
     def get_audio_duration(self, audio_path: str) -> float:

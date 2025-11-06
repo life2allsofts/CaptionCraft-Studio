@@ -20,6 +20,7 @@ import tkinter as tk
 import customtkinter as ctk
 import os
 import sys
+import re
 from typing import TYPE_CHECKING, Any
 
 # Add the project root to Python path for cross-module imports
@@ -101,11 +102,20 @@ except ImportError as e:
         def update_status(self, message: str):
             print(f"Status: {message}")
         
-        def show_progress(self):
-            print("Progress started")
+        def show_progress(self, message: str = ""):
+            print(f"Progress started: {message}")
         
         def hide_progress(self):
             print("Progress ended")
+        
+        def update_progress(self, progress: float, message: str = ""):
+            print(f"Progress: {progress*100:.0f}% - {message}")
+        
+        def show_error(self, message: str):
+            print(f"Error: {message}")
+        
+        def show_success(self, message: str):
+            print(f"Success: {message}")
     
     class FileDialogs:
         def __init__(self, app):
@@ -306,38 +316,76 @@ class CaptionCraftStudio(ctk.CTk):
 
     def process_media_file(self, file_path: str):
         """
-        Process media file for AI transcription.
-        
-        Args:
-            file_path (str): Path to media file to process
+        Enhanced media processing with PROPER TIMING using Whisper segments
         """
         try:
-            self.status_bar.update_status(f"Processing media: {os.path.basename(file_path)}")
-            self.status_bar.show_progress()
+            self.status_bar.show_progress("Starting media processing...")
             
-            # Initialize audio processor
+            # Check if file exists
+            if not os.path.exists(file_path):
+                self.status_bar.show_error(f"File not found: {file_path}")
+                return
+            
+            # Try Whisper first for proper timing segments
+            self.status_bar.update_progress(0.2, "Initializing AI transcription...")
             from core.audio_processor.unified_processor import UnifiedAudioProcessor
             processor = UnifiedAudioProcessor()
             
-            # Check if AI transcription is available
-            if not processor.get_status()["whisper_available"]:
-                self.status_bar.update_status("AI transcription not available. Install whisper.")
+            if processor.get_status()["whisper_available"]:
+                try:
+                    self.status_bar.update_progress(0.4, "AI transcribing with timing...")
+                    result = processor.transcribe_media(file_path)
+                    
+                    if result["success"] and result["segments"]:
+                        self.status_bar.update_progress(0.8, "Creating timed subtitles...")
+                        
+                        # Use Whisper's timing data for proper segments
+                        vtt_content = self._convert_whisper_to_vtt(result["segments"])
+                        self.set_subtitle_text(vtt_content)
+                        self.update_preview(vtt_content)
+                        
+                        self.status_bar.show_success(
+                            f"AI transcription complete: {len(result['segments'])} timed segments"
+                        )
+                        self._auto_save_transcription(result['text'])
+                        return
+                        
+                except Exception as e:
+                    print(f"⚠️ Whisper failed, falling back: {e}")
+            
+            # FALLBACK: Use MoviePy with SIMULATED timing
+            self.status_bar.update_progress(0.4, "Using fallback transcription...")
+            from core.audio_processor.audio_extractor import AudioExtractor
+            extractor = AudioExtractor()
+            
+            if not extractor.is_audio_available():
+                self.status_bar.show_error("Audio processing not available")
                 return
             
-            # Process the media file
-            self.status_bar.update_status("AI transcribing media...")
-            result = processor.transcribe_media(file_path)
+            # Extract and transcribe audio
+            self.status_bar.update_progress(0.6, "Extracting audio...")
+            audio_path = extractor.extract_audio_from_video(file_path)
+            transcription = extractor.transcribe_audio(audio_path)
+            duration = extractor.get_audio_duration(audio_path)
             
-            if result["success"]:
-                # Convert segments to subtitle format
-                subtitle_content = self._convert_whisper_to_vtt(result["segments"])
-                self.set_subtitle_text(subtitle_content)
-                self.status_bar.update_status(f"AI transcription complete: {len(result['segments'])} segments")
-            else:
-                self.status_bar.update_status(f"Transcription failed: {result.get('error', 'Unknown error')}")
-                
+            # Convert to VTT with SIMULATED timing (better than one block)
+            self.status_bar.update_progress(0.8, "Creating subtitles with timing...")
+            vtt_content = self._convert_text_to_timed_vtt(transcription, duration)
+            
+            # Load into editor
+            self.set_subtitle_text(vtt_content)
+            self.update_preview(vtt_content)
+            
+            self.status_bar.show_success(f"Transcription complete: {len(transcription)} characters")
+            
+            # Auto-save transcription
+            self._auto_save_transcription(transcription)
+            
         except Exception as e:
-            self.status_bar.update_status(f"Media processing error: {e}")
+            self.status_bar.show_error(f"Media processing error: {e}")
+            import traceback
+            print(f"Detailed error: {traceback.format_exc()}")
+            
         finally:
             self.status_bar.hide_progress()
             if 'processor' in locals():
@@ -345,13 +393,13 @@ class CaptionCraftStudio(ctk.CTk):
 
     def _convert_whisper_to_vtt(self, segments: list) -> str:
         """
-        Convert Whisper segments to VTT format.
+        Convert Whisper segments to VTT format with PROPER TIMING.
         
         Args:
-            segments (list): Whisper transcription segments
+            segments (list): Whisper segments with start/end times
             
         Returns:
-            str: VTT formatted subtitles
+            str: VTT formatted subtitles with timing
         """
         vtt_content = "WEBVTT\n\n"
         
@@ -360,21 +408,71 @@ class CaptionCraftStudio(ctk.CTk):
             end = self._format_timestamp(segment["end"])
             text = segment["text"].strip()
             
-            vtt_content += f"{i}\n"
-            vtt_content += f"{start} --> {end}\n"
-            vtt_content += f"{text}\n\n"
+            # Only add non-empty segments
+            if text:
+                vtt_content += f"{i}\n"
+                vtt_content += f"{start} --> {end}\n"
+                vtt_content += f"{text}\n\n"
         
         return vtt_content
 
+    def _convert_text_to_timed_vtt(self, text: str, total_duration: float) -> str:
+        """
+        Convert plain text to VTT with SIMULATED timing (fallback when Whisper fails).
+        Splits text into chunks with reasonable timing.
+        """
+        vtt_content = "WEBVTT\n\n"
+        
+        # Split text into sentences or reasonable chunks
+        sentences = self._split_into_subtitles(text)
+        
+        # Calculate time per chunk
+        if sentences:
+            time_per_chunk = total_duration / len(sentences)
+        else:
+            time_per_chunk = total_duration
+        
+        for i, sentence in enumerate(sentences):
+            if sentence.strip():
+                start_time = i * time_per_chunk
+                end_time = (i + 1) * time_per_chunk
+                
+                # Ensure end time doesn't exceed total duration
+                end_time = min(end_time, total_duration)
+                
+                vtt_content += f"{i + 1}\n"
+                vtt_content += f"{self._format_timestamp(start_time)} --> {self._format_timestamp(end_time)}\n"
+                vtt_content += f"{sentence.strip()}\n\n"
+        
+        return vtt_content
+
+    def _split_into_subtitles(self, text: str) -> list:
+        """
+        Split text into subtitle-friendly chunks.
+        """
+        # Simple sentence splitting
+        sentences = re.split(r'[.!?]+', text)
+        
+        # Filter empty sentences and clean up
+        sentences = [s.strip() for s in sentences if s.strip()]
+        
+        # Further split long sentences
+        result = []
+        for sentence in sentences:
+            words = sentence.split()
+            if len(words) <= 15:  # Reasonable subtitle length
+                result.append(sentence)
+            else:
+                # Split long sentences into chunks
+                chunks = [words[i:i+10] for i in range(0, len(words), 10)]
+                for chunk in chunks:
+                    result.append(' '.join(chunk))
+        
+        return result
+
     def _format_timestamp(self, seconds: float) -> str:
         """
-        Format seconds to VTT timestamp.
-        
-        Args:
-            seconds (float): Time in seconds
-            
-        Returns:
-            str: Formatted timestamp (HH:MM:SS.mmm)
+        Format seconds to VTT timestamp (HH:MM:SS.mmm)
         """
         hours = int(seconds // 3600)
         minutes = int((seconds % 3600) // 60)
@@ -382,6 +480,31 @@ class CaptionCraftStudio(ctk.CTk):
         milliseconds = int((seconds_remaining - int(seconds_remaining)) * 1000)
         
         return f"{hours:02d}:{minutes:02d}:{int(seconds_remaining):02d}.{milliseconds:03d}"
+
+    def _auto_save_transcription(self, text: str):
+        """Auto-save transcription to file for backup"""
+        try:
+            import datetime
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_file = f"transcription_backup_{timestamp}.txt"
+            
+            with open(backup_file, 'w', encoding='utf-8') as f:
+                f.write(text)
+            
+            print(f"💾 Transcription backed up to: {backup_file}")
+        except Exception as e:
+            print(f"⚠️ Could not backup transcription: {e}")
+
+    def show_message(self, title: str, message: str, message_type: str = "info"):
+        """Show message dialog"""
+        import tkinter.messagebox as messagebox
+        
+        if message_type == "error":
+            messagebox.showerror(title, message)
+        elif message_type == "warning":
+            messagebox.showwarning(title, message)
+        else:
+            messagebox.showinfo(title, message)
     
     def center_window(self):
         """

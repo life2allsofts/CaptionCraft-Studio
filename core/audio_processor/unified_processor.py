@@ -1,11 +1,25 @@
 """
 Unified Audio Processor for CaptionCraft Studio
-Tries multiple approaches for audio processing with graceful fallbacks
+Enhanced version with direct video support and fallback audio extraction
 """
 
 import os
-import tempfile
+import sys
 from typing import Dict, Any, Optional, List
+
+# Add project root to path for imports
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+# Import audio extractor
+try:
+    from .audio_extractor import AudioExtractor
+    AUDIO_EXTRACTOR_AVAILABLE = True
+    print("✅ Audio extractor available")
+except ImportError as e:
+    print(f"⚠️ Audio extractor not available: {e}")
+    AUDIO_EXTRACTOR_AVAILABLE = False
 
 # Try to import Whisper
 try:
@@ -56,30 +70,56 @@ class WhisperTranscriber:
     def transcribe_audio(self, audio_path: str, language: Optional[str] = None) -> Dict[str, Any]:
         """
         Transcribe audio file using Whisper.
-        
-        Args:
-            audio_path (str): Path to audio file
-            language (Optional[str]): Language code (e.g., "en", "fr")
-            
-        Returns:
-            Dict with transcription results including segments and text
+        FIXED: Better file validation and error handling
         """
+        # Enhanced file validation
         if not os.path.exists(audio_path):
             raise FileNotFoundError(f"Audio file not found: {audio_path}")
         
+        # Check file permissions and readability
+        if not os.access(audio_path, os.R_OK):
+            raise PermissionError(f"Cannot read audio file: {audio_path}")
+        
+        # Check file size
+        file_size = os.path.getsize(audio_path)
+        if file_size == 0:
+            raise ValueError(f"Audio file is empty: {audio_path}")
+        
+        print(f"🔍 Audio file validation passed:")
+        print(f"   📍 Path: {audio_path}")
+        print(f"   📊 Size: {file_size / (1024 * 1024):.2f} MB")
+        print(f"   ✅ Readable: {os.access(audio_path, os.R_OK)}")
+        
         self.load_model()
         
-        if self.model is None:
-            raise RuntimeError("Whisper model failed to load.")
-        
-        # Transcribe audio
-        result = self.model.transcribe(
-            audio_path,
-            language=language,
-            verbose=False
-        )
-        
-        return result
+        try:
+            print("🎤 Starting Whisper transcription...")
+            # Transcribe audio with verbose for debugging
+            result = self.model.transcribe(
+                audio_path,
+                language=language,
+                verbose=True,  # Enable verbose for debugging
+                fp16=False     # Force FP32 since we're on CPU
+            )
+            
+            print("✅ Whisper transcription completed successfully")
+            return result
+            
+        except Exception as e:
+            print(f"❌ Whisper transcription error: {e}")
+            
+            # Additional debugging: Check if it's a file format issue
+            try:
+                import wave
+                with wave.open(audio_path, 'rb') as wav_file:
+                    frames = wav_file.getnframes()
+                    rate = wav_file.getframerate()
+                    duration = frames / float(rate)
+                    print(f"🔍 WAV file details: {duration:.2f}s duration, {rate}Hz")
+            except Exception as wav_error:
+                print(f"🔍 Not a valid WAV file: {wav_error}")
+            
+            raise e
     
     def transcribe_to_srt(self, audio_path: str, output_path: str, language: Optional[str] = None) -> str:
         """
@@ -150,6 +190,7 @@ class UnifiedAudioProcessor:
         """
         self.preferred_method = preferred_method
         self.whisper = None
+        self.audio_extractor = None
         self.temp_files = []
         
         # Initialize Whisper if available
@@ -159,26 +200,35 @@ class UnifiedAudioProcessor:
                 print("✅ Whisper transcriber initialized")
             except Exception as e:
                 print(f"⚠️ Whisper initialization failed: {e}")
+        
+        # Initialize audio extractor if available
+        if AUDIO_EXTRACTOR_AVAILABLE:
+            try:
+                self.audio_extractor = AudioExtractor()
+                print("✅ Audio extractor initialized")
+            except Exception as e:
+                print(f"⚠️ Audio extractor initialization failed: {e}")
     
     def transcribe_media(self, media_path: str, language: Optional[str] = None) -> Dict[str, Any]:
         """
-        Transcribe media file (audio/video) to text with timing.
-        
-        Args:
-            media_path (str): Path to media file
-            language (Optional[str]): Language code
-            
-        Returns:
-            Dict with transcription results
+        Enhanced transcription with direct video support and fallback audio extraction
         """
         if not os.path.exists(media_path):
             raise FileNotFoundError(f"Media file not found: {media_path}")
         
-        # Try Whisper first (most accurate)
+        print(f"🎬 Processing: {media_path}")
+        
+        # Try direct video transcription with Whisper
         if self.whisper and self.whisper.is_available():
             try:
-                print("🎤 Using OpenAI Whisper for transcription...")
-                result = self.whisper.transcribe_audio(media_path, language)
+                print("🎤 Attempting direct video transcription with Whisper...")
+                
+                # Use absolute path
+                absolute_path = os.path.abspath(media_path)
+                
+                result = self.whisper.transcribe_audio(absolute_path, language)
+                
+                print(f"✅ Direct transcription successful!")
                 return {
                     "method": "whisper",
                     "success": True,
@@ -186,10 +236,31 @@ class UnifiedAudioProcessor:
                     "segments": result.get("segments", []),
                     "language": result.get("language", "en")
                 }
+                
             except Exception as e:
-                print(f"⚠️ Whisper transcription failed: {e}")
+                print(f"⚠️ Direct transcription failed: {e}")
+                
+                # Fallback: Extract audio first, then transcribe
+                if self.audio_extractor:
+                    try:
+                        print("🔄 Falling back to audio extraction method...")
+                        audio_path = self.audio_extractor.extract_audio_for_whisper(media_path)
+                        
+                        print(f"🎤 Transcribing extracted audio...")
+                        result = self.whisper.transcribe_audio(audio_path, language)
+                        
+                        print(f"✅ Fallback transcription successful!")
+                        return {
+                            "method": "whisper",
+                            "success": True,
+                            "text": result["text"],
+                            "segments": result.get("segments", []),
+                            "language": result.get("language", "en")
+                        }
+                        
+                    except Exception as fallback_error:
+                        print(f"❌ Fallback also failed: {fallback_error}")
         
-        # If we get here, no methods worked
         return {
             "method": "none",
             "success": False,
@@ -245,18 +316,37 @@ class UnifiedAudioProcessor:
         if self.whisper and self.whisper.is_available():
             methods.append("whisper")
         
+        if self.audio_extractor and self.audio_extractor.is_audio_available():
+            methods.append("speech_recognition")
+        
         return methods
     
     def get_status(self) -> Dict[str, Any]:
         """Get status of all audio processing methods."""
         return {
             "whisper_available": self.whisper and self.whisper.is_available(),
+            "audio_extractor_available": self.audio_extractor and self.audio_extractor.is_audio_available(),
             "preferred_method": self.preferred_method,
             "available_methods": self.get_available_methods()
         }
     
     def cleanup(self):
         """Clean up temporary files."""
+        # Clean up whisper temp files
+        if self.whisper:
+            for temp_file in self.whisper.temp_files:
+                try:
+                    if os.path.exists(temp_file):
+                        os.unlink(temp_file)
+                except Exception:
+                    pass
+            self.whisper.temp_files = []
+        
+        # Clean up audio extractor temp files
+        if self.audio_extractor:
+            self.audio_extractor.cleanup()
+        
+        # Clean up processor temp files
         for temp_file in self.temp_files:
             try:
                 if os.path.exists(temp_file):
@@ -277,7 +367,7 @@ if __name__ == "__main__":
     
     if not status["available_methods"]:
         print("\n❌ No audio processing methods available")
-        print("💡 Install: pip install moviepy openai-whisper")
+        print("💡 Install: pip install moviepy openai-whisper SpeechRecognition")
         exit(1)
     
     print(f"\n✅ Available methods: {', '.join(status['available_methods'])}")

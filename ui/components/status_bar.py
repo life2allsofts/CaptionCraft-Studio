@@ -1,12 +1,12 @@
 """
-Status Bar Component for CaptionCraft Studio
+Enhanced Status Bar with Progress Indicators
 """
 
 import customtkinter as ctk
-
+from typing import Optional
 
 class StatusBar:
-    """Status bar component for displaying messages"""
+    """Status bar with progress indicators and better messaging"""
     
     def __init__(self, parent, app):
         self.parent = parent
@@ -15,40 +15,71 @@ class StatusBar:
     
     def setup_ui(self):
         """Setup the status bar UI"""
-        self.status_frame = ctk.CTkFrame(self.parent)
-        self.status_frame.pack(fill="x", padx=10, pady=5)
+        self.status_frame = ctk.CTkFrame(self.parent, height=30)
+        self.status_frame.pack(fill="x", side="bottom", padx=10, pady=5)
+        self.status_frame.pack_propagate(False)
         
+        # Status label
         self.status_label = ctk.CTkLabel(
+            self.status_frame, 
+            text="Ready",
+            font=ctk.CTkFont(size=12)
+        )
+        self.status_label.pack(side="left", padx=10, pady=5)
+        
+        # Progress bar (initially hidden)
+        self.progress_bar = ctk.CTkProgressBar(
             self.status_frame,
-            text="Ready to create amazing subtitles!",
+            width=200,
+            height=16
+        )
+        self.progress_bar.pack(side="right", padx=10, pady=5)
+        self.progress_bar.pack_forget()  # Hide initially
+        
+        # Progress label
+        self.progress_label = ctk.CTkLabel(
+            self.status_frame,
+            text="",
             font=ctk.CTkFont(size=10)
         )
-        self.status_label.pack(side="left", padx=10, pady=2)
-        
-        # Progress bar (for future use)
-        self.progress_bar = ctk.CTkProgressBar(self.status_frame, width=200)
-        self.progress_bar.pack(side="right", padx=10, pady=2)
-        self.progress_bar.set(0)
-        self.progress_bar.pack_forget()  # Hide by default
+        self.progress_label.pack(side="right", padx=(0, 5), pady=5)
+        self.progress_label.pack_forget()
     
-    def update_status(self, message: str, duration: int = 5000):
-        """Update the status bar message"""
+    def update_status(self, message: str, duration: Optional[int] = None):
+        """Update status message with optional auto-clear"""
         self.status_label.configure(text=message)
-        # Clear message after duration
-        self.app.after(duration, self.clear_status)
+        self.parent.update()
+        
+        if duration:
+            self.parent.after(duration, lambda: self.update_status("Ready"))
     
-    def clear_status(self):
-        """Clear status message to default"""
-        self.status_label.configure(text="Ready")
+    def show_progress(self, message: str = "Processing..."):
+        """Show progress bar with message"""
+        self.progress_label.configure(text=message)
+        self.progress_label.pack(side="right", padx=(0, 5), pady=5)
+        self.progress_bar.pack(side="right", padx=10, pady=5)
+        self.progress_bar.set(0)
+        self.parent.update()
     
-    def show_progress(self):
-        """Show progress bar"""
-        self.progress_bar.pack(side="right", padx=10, pady=2)
+    def update_progress(self, value: float, message: Optional[str] = None):
+        """Update progress bar value (0.0 to 1.0)"""
+        self.progress_bar.set(value)
+        if message:
+            self.progress_label.configure(text=message)
+        self.parent.update()
     
     def hide_progress(self):
         """Hide progress bar"""
+        self.progress_label.pack_forget()
         self.progress_bar.pack_forget()
+        self.parent.update()
     
-    def set_progress(self, value: float):
-        """Set progress bar value (0.0 to 1.0)"""
-        self.progress_bar.set(value)
+    def show_error(self, message: str):
+        """Show error message with red styling"""
+        self.status_label.configure(text=f"❌ {message}", text_color="#FF4444")
+        self.parent.update()
+    
+    def show_success(self, message: str):
+        """Show success message with green styling"""
+        self.status_label.configure(text=f"✅ {message}", text_color="#44FF44")
+        self.parent.update()
