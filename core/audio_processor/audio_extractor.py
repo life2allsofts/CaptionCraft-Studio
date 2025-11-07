@@ -1,6 +1,6 @@
 """
 Audio Extractor for CaptionCraft Studio
-Enhanced version with better beginning audio capture and Whisper optimization
+REVERTED to working version with targeted beginning audio fix
 """
 
 import os
@@ -30,7 +30,7 @@ except ImportError as e:
 
 class AudioExtractor:
     """
-    Enhanced audio extractor with better beginning audio capture and Whisper optimization.
+    Audio extractor - REVERTED to working version with targeted fix for beginning audio.
     """
     
     def __init__(self):
@@ -44,7 +44,7 @@ class AudioExtractor:
     def extract_audio_from_video(self, video_path: str, output_audio_path: Optional[str] = None) -> str:
         """
         Extract audio from video file and save as WAV format.
-        Enhanced to better capture beginning audio.
+        SIMPLE AND WORKING VERSION.
         """
         if not MOVIEPY_AVAILABLE:
             raise ValueError("MoviePy not available. Install moviepy.")
@@ -84,17 +84,12 @@ class AudioExtractor:
                 print(f"🔊 Audio track found: {audio.duration:.2f}s")
                 print(f"💾 Writing audio to: {output_audio_path}")
                 
-                # ENHANCEMENT: Use optimized settings for better speech recognition
+                # SIMPLE SETTINGS THAT WORK
                 audio.write_audiofile(
                     output_audio_path, 
                     verbose=False, 
                     logger=None,
-                    fps=16000,  # Better for speech recognition
-                    ffmpeg_params=[
-                        '-ac', '1',  # Mono audio
-                        '-ar', '16000',  # 16kHz sample rate
-                        '-af', 'highpass=f=80,lowpass=f=8000'  # Filter out extreme frequencies
-                    ]
+                    fps=44100  # Standard audio sample rate
                 )
             finally:
                 video.close()
@@ -111,77 +106,6 @@ class AudioExtractor:
             # Clean up on error
             self.cleanup()
             raise e
-
-    def extract_audio_with_early_start(self, video_path: str, start_early: float = 2.0) -> str:
-        """
-        Extract audio with enhanced settings to capture beginning audio.
-        Adds padding and uses better audio processing.
-        """
-        if not MOVIEPY_AVAILABLE:
-            raise ValueError("MoviePy not available. Install moviepy.")
-        
-        if not os.path.exists(video_path):
-            raise FileNotFoundError(f"Video file not found: {video_path}")
-        
-        # Create temp directory
-        temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "temp_audio")
-        os.makedirs(temp_dir, exist_ok=True)
-        
-        output_audio_path = os.path.join(temp_dir, f"early_{uuid.uuid4().hex}.wav")
-        self.temp_files.append(output_audio_path)
-        
-        try:
-            print(f"🔊 Loading video with early start: {video_path}")
-            
-            # Ensure VideoFileClip is not None before calling it
-            if VideoFileClip is None:
-                raise ImportError("MoviePy's VideoFileClip is not available")
-            video = VideoFileClip(video_path) # type: ignore
-            try:
-                print(f"📊 Video loaded: {video.duration:.2f}s duration")
-                
-                audio = video.audio
-                if audio is None:
-                    raise ValueError("No audio track found in video file")
-                
-                print(f"🔊 Audio track found: {audio.duration:.2f}s")
-                print(f"💾 Writing enhanced audio with early start...")
-                
-                # ENHANCEMENT: Use settings optimized for capturing beginning audio
-                audio.write_audiofile(
-                    output_audio_path, 
-                    verbose=False, 
-                    logger=None,
-                    fps=16000,
-                    ffmpeg_params=[
-                        '-ac', '1',  # Mono
-                        '-ar', '16000',  # 16kHz
-                        '-af', 'apad=pad_dur=0.5,areverse,apad=pad_dur=0.5,areverse',  # Add padding at both ends
-                        '-ss', '0.1'  # Start slightly after beginning to avoid corruption
-                    ]
-                )
-            finally:
-                video.close()
-                
-            # Verify the file was created
-            if os.path.exists(output_audio_path):
-                file_size = os.path.getsize(output_audio_path)
-                print(f"✅ Early-start audio extracted: {output_audio_path} ({file_size} bytes)")
-                return output_audio_path
-            else:
-                raise Exception("Early-start audio file was not created")
-                
-        except Exception as e:
-            # Clean up on error and fall back to regular extraction
-            print(f"⚠️ Early start extraction failed: {e}")
-            if os.path.exists(output_audio_path):
-                try:
-                    os.unlink(output_audio_path)
-                    self.temp_files.remove(output_audio_path)
-                except:
-                    pass
-            # Fall back to regular extraction
-            return self.extract_audio_from_video(video_path)
 
     def extract_audio_for_whisper(self, video_path: str) -> str:
         """
@@ -216,11 +140,7 @@ class AudioExtractor:
                     verbose=False, 
                     logger=None,
                     fps=16000,  # Whisper prefers 16kHz
-                    ffmpeg_params=[
-                        '-ac', '1',  # Mono audio for Whisper
-                        '-ar', '16000',
-                        '-af', 'highpass=f=100'  # Remove low-frequency noise
-                    ]
+                    ffmpeg_params=['-ac', '1']  # Mono audio for Whisper
                 )
                 
             # Verify the file was created properly
@@ -260,8 +180,8 @@ class AudioExtractor:
             try:
                 file_size = os.path.getsize(audio_path)
                 # WAV file duration estimation: file_size / (sample_rate * channels * bits_per_sample / 8)
-                # For 16kHz, 1 channel, 16-bit WAV:
-                duration = file_size / (16000 * 1 * 2)  # More accurate estimation
+                # For standard 44.1kHz, 2 channels, 16-bit WAV:
+                duration = file_size / (44100 * 2 * 2)  # Rough estimation
                 print(f"📏 Estimated duration: {duration:.2f}s from file size")
                 return max(duration, 1.0)
             except:
@@ -270,7 +190,7 @@ class AudioExtractor:
     def transcribe_audio(self, audio_path: str, language: str = "en") -> str:
         """
         Transcribe audio file to text using speech recognition.
-        Enhanced with multiple attempts to capture beginning audio.
+        TARGETED FIX: Better beginning capture with segmented approach.
         """
         if self.recognizer is None:
             raise ValueError("Speech recognition not available.")
@@ -290,41 +210,38 @@ class AudioExtractor:
             with speech_module.AudioFile(audio_path) as source:
                 print("🔊 Audio file loaded, adjusting for noise...")
                 
-                # ENHANCEMENT: Multiple noise adjustment passes
-                self.recognizer.adjust_for_ambient_noise(source, duration=1)  # Longer initial adjustment
-                self.recognizer.adjust_for_ambient_noise(source, duration=1)  # Second pass
+                # TARGETED FIX: Use shorter noise adjustment to preserve beginning
+                self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
                 
-                # ENHANCEMENT: Try multiple recording strategies
+                # TARGETED FIX: Focus on capturing the beginning
+                print("🎤 Capturing beginning audio (first 10 seconds)...")
                 
-                # ATTEMPT 1: Full audio with better settings
-                print("🎤 Attempt 1: Full audio recognition...")
+                # Read first 10 seconds VERY carefully (where intros usually are)
+                beginning_audio = self.recognizer.record(source, duration=10, offset=0)
+                
+                # Then read the rest
+                rest_audio = self.recognizer.record(source)
+                
+                print("🎤 Transcribing beginning segment...")
                 try:
-                    audio_data = self.recognizer.record(source)
-                    text = self.recognizer.recognize_google(audio_data, language=language)  # type: ignore
-                    print(f"✅ Transcription successful (full audio): {len(text)} characters")
-                    return text
+                    beginning_text = self.recognizer.recognize_google(beginning_audio, language=language)
+                    print(f"✅ Beginning transcribed: {len(beginning_text)} characters")
                 except speech_module.UnknownValueError:
-                    print("⚠️ Full audio recognition failed, trying segmented approach...")
+                    print("⚠️ Beginning segment unclear, trying full audio...")
+                    # If beginning fails, try full audio as fallback
+                    source.SAMPLE_WIDTH = None
+                    source.DURATION = None
+                    full_audio = self.recognizer.record(source)
+                    full_text = self.recognizer.recognize_google(full_audio, language=language)
+                    print(f"✅ Full audio transcribed: {len(full_text)} characters")
+                    return full_text
                 
-                # ATTEMPT 2: Segmented recognition (better for capturing beginnings)
-                try:
-                    # Reset and try segmented approach
-                    
-                    # Read first 15 seconds separately (often contains intro)
-                    print("🎤 Attempt 2: Segmented recognition...")
-                    intro_audio = self.recognizer.record(source, duration=15, offset=0)
-                    rest_audio = self.recognizer.record(source)
-                    
-                    intro_text = self.recognizer.recognize_google(intro_audio, language=language)  # type: ignore
-                    rest_text = self.recognizer.recognize_google(rest_audio, language=language)  # type: ignore
-                    
-                    combined_text = f"{intro_text} {rest_text}"
-                    print(f"✅ Transcription successful (segmented): {len(combined_text)} characters")
-                    return combined_text
-                    
-                except speech_module.UnknownValueError:
-                    print("⚠️ Segmented recognition also failed")
-                    return "Speech recognition could not understand audio"
+                print("🎤 Transcribing remaining audio...")
+                rest_text = self.recognizer.recognize_google(rest_audio, language=language)
+                
+                combined_text = f"{beginning_text} {rest_text}"
+                print(f"✅ Transcription successful: {len(combined_text)} total characters")
+                return combined_text
                 
         except speech_module.UnknownValueError:
             raise Exception("Speech recognition could not understand audio")
@@ -333,40 +250,67 @@ class AudioExtractor:
         except Exception as e:
             raise Exception(f"Transcription error: {str(e)}")
     
-    def transcribe_with_beginning_focus(self, audio_path: str, language: str = "en") -> str:
+    def transcribe_with_intro_focus(self, audio_path: str, language: str = "en") -> str:
         """
-        Specialized transcription that focuses on capturing the beginning of audio.
+        SPECIALIZED METHOD: Focus specifically on capturing intro audio.
+        Uses multiple attempts to get the beginning.
         """
         if self.recognizer is None:
             raise ValueError("Speech recognition not available.")
         
-        print(f"🎤 Transcribing with beginning focus: {audio_path}")
+        print(f"🎤 SPECIALIZED: Transcribing with intro focus: {audio_path}")
         
         try:
             if sr is None:
                 raise ValueError("SpeechRecognition module not available.")
+            
             with sr.AudioFile(audio_path) as source:
-                # Focus on the beginning: longer noise adjustment
-                self.recognizer.adjust_for_ambient_noise(source, duration=2)
+                # ATTEMPT 1: Very short noise adjustment to preserve beginning
+                self.recognizer.adjust_for_ambient_noise(source, duration=0.3)
                 
-                # Specifically target the first 20 seconds where intros usually are
-                beginning_audio = self.recognizer.record(source, duration=20)
-                # Use getattr to access recognize_google if static analysis fails
-                recognize_google = getattr(self.recognizer, "recognize_google", None)
-                if recognize_google is None:
-                    raise AttributeError("Recognizer object has no attribute 'recognize_google'. Make sure SpeechRecognition is installed correctly.")
-                beginning_text = recognize_google(beginning_audio, language=language)
+                # Read first 15 seconds with high priority
+                print("🎤 Attempt 1: Focused intro capture (first 15s)...")
+                intro_audio = self.recognizer.record(source, duration=15)
                 
-                # Try to get the rest if possible
                 try:
-                    rest_audio = self.recognizer.record(source)
-                    rest_text = recognize_google(rest_audio, language=language)
-                    return f"{beginning_text} {rest_text}"
-                except:
-                    return beginning_text
+                    intro_text = self.recognizer.recognize_google(intro_audio, language=language)
+                    print(f"✅ Intro captured: '{intro_text[:100]}...'")
                     
+                    # Get the rest
+                    rest_audio = self.recognizer.record(source)
+                    rest_text = self.recognizer.recognize_google(rest_audio, language=language)
+                    
+                    return f"{intro_text} {rest_text}"
+                    
+                except speech_module.UnknownValueError:
+                    print("⚠️ Intro capture failed, trying alternative approach...")
+                    
+                    # ATTEMPT 2: Reset and try different segmentation
+                    source.SAMPLE_WIDTH = None
+                    source.DURATION = None
+                    self.recognizer.adjust_for_ambient_noise(source, duration=0.2)
+                    
+                    # Try even smaller segments for the beginning
+                    print("🎤 Attempt 2: Ultra-focused beginning (first 5s)...")
+                    beginning_audio = self.recognizer.record(source, duration=5)
+                    middle_audio = self.recognizer.record(source, duration=10)
+                    end_audio = self.recognizer.record(source)
+                    
+                    try:
+                        beginning_text = self.recognizer.recognize_google(beginning_audio, language=language)
+                        middle_text = self.recognizer.recognize_google(middle_audio, language=language)
+                        end_text = self.recognizer.recognize_google(end_audio, language=language)
+                        
+                        return f"{beginning_text} {middle_text} {end_text}"
+                    except:
+                        # Final fallback: full audio
+                        source.SAMPLE_WIDTH = None
+                        source.DURATION = None
+                        full_audio = self.recognizer.record(source)
+                        return self.recognizer.recognize_google(full_audio, language=language)
+                        
         except Exception as e:
-            print(f"⚠️ Beginning-focused transcription failed: {e}")
+            print(f"⚠️ Specialized intro transcription failed: {e}")
             # Fall back to regular transcription
             return self.transcribe_audio(audio_path, language)
     
@@ -398,10 +342,26 @@ class AudioExtractor:
         self.cleanup()
 
 
-# Example usage and testing - ENHANCED VERSION
+# Update your main_app.py to use the specialized method:
+"""
+In your main_app.py, replace the transcription line in process_media_file:
+
+# Change this:
+transcription = extractor.transcribe_audio(audio_path)
+
+# To this:
+try:
+    transcription = extractor.transcribe_with_intro_focus(audio_path)
+    print("🔊 Used specialized intro-focused transcription")
+except Exception as e:
+    print(f"⚠️ Intro focus failed, using regular: {e}")
+    transcription = extractor.transcribe_audio(audio_path)
+"""
+
+# Example usage and testing
 if __name__ == "__main__":
-    print("🎬 Enhanced Audio Extractor Test - Beginning Audio Focus")
-    print("=" * 60)
+    print("🎬 Audio Extractor Test - Intro Focus Version")
+    print("=" * 50)
     
     extractor = AudioExtractor()
     
@@ -413,9 +373,8 @@ if __name__ == "__main__":
     
     # Look for test video files
     test_files = [
-        "test_video.mp4",      # Your renamed file
-        "test_video.mp4",  # Original name
-        "text_video.mp4",      # Common typo
+        "test_video.mp4",
+        "Nehemiah's Wall.mp4",
     ]
     
     video_path = None
@@ -436,22 +395,22 @@ if __name__ == "__main__":
     print(f"🎬 Found video: {video_path}")
     
     try:
-        # Step 1: Extract audio with early start
-        print("\n🔊 Step 1: Extracting audio with early start...")
-        audio_path = extractor.extract_audio_with_early_start(video_path)
+        # Step 1: Extract audio (SIMPLE version)
+        print("\n🔊 Step 1: Extracting audio...")
+        audio_path = extractor.extract_audio_from_video(video_path)
         
         # Step 2: Get duration
         print("\n⏱️ Step 2: Getting audio duration...")
         duration = extractor.get_audio_duration(audio_path)
         print(f"✅ Audio duration: {duration:.2f} seconds")
         
-        # Step 3: Transcribe with beginning focus
-        print("\n🎤 Step 3: Transcribing with beginning focus...")
-        transcription = extractor.transcribe_with_beginning_focus(audio_path)
+        # Step 3: Transcribe with intro focus
+        print("\n🎤 Step 3: Transcribing with intro focus...")
+        transcription = extractor.transcribe_with_intro_focus(audio_path)
         print(f"📝 Transcription: {transcription}")
         
         # Save transcription to file
-        transcript_file = "enhanced_audio_transcription.txt"
+        transcript_file = "intro_focus_transcription.txt"
         with open(transcript_file, 'w', encoding='utf-8') as f:
             f.write(transcription)
         print(f"💾 Transcription saved to: {transcript_file}")
