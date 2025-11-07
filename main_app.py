@@ -22,7 +22,7 @@ import customtkinter as ctk
 import os
 import sys
 import re
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 # Add the project root to Python path for cross-module imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -52,14 +52,6 @@ try:
     from ui.components.preview_tab import PreviewTab
     from ui.components.status_bar import StatusBar
     from ui.dialogs.file_dialogs import FileDialogs
-    
-    # Try to import VideoPreviewTab, but provide fallback if not available
-    try:
-        from ui.components.video_preview_tab import VideoPreviewTab
-        VIDEO_PREVIEW_AVAILABLE = True
-    except ImportError:
-        VIDEO_PREVIEW_AVAILABLE = False
-        print("⚠️ VideoPreviewTab not available, continuing without video preview")
     
     print("✅ All imports successful")
     
@@ -103,13 +95,13 @@ except ImportError as e:
         
         def update_preview(self, content: str):
             pass
-        
+    
     class VideoPreviewTab:
         def __init__(self, notebook, app):
             self.notebook = notebook
             self.app = app
         
-        def update_preview(self, video_path: Optional[str] = None, vtt_content: Optional[str] = None):
+        def update_preview(self, video_path: str | None = None, vtt_content: str | None = None):
             pass
     
     class StatusBar:
@@ -138,8 +130,6 @@ except ImportError as e:
     class FileDialogs:
         def __init__(self, app):
             self.app = app
-    
-    VIDEO_PREVIEW_AVAILABLE = True
 
 
 class CaptionCraftStudio(ctk.CTk):
@@ -240,9 +230,7 @@ class CaptionCraftStudio(ctk.CTk):
         self.setup_main_content()
     
     def setup_main_content(self):
-        """
-        Setup the main content area with tabs including video preview.
-        """
+        """Setup the main content area with tabs including video preview"""
         content_frame = ctk.CTkFrame(self.main_frame)
         content_frame.pack(fill="both", expand=True, padx=10, pady=10)
         
@@ -250,14 +238,19 @@ class CaptionCraftStudio(ctk.CTk):
         self.notebook = ctk.CTkTabview(content_frame)
         self.notebook.pack(fill="both", expand=True)
         
-        # Initialize tab components - including video preview
+        # Initialize tab components - ADD VIDEO PREVIEW
         self.editor_tab = EditorTab(self.notebook, self)
         self.styling_tab = StylingTab(self.notebook, self)
         self.preview_tab = PreviewTab(self.notebook, self)
         
-        # Add video preview tab if available
-        if VIDEO_PREVIEW_AVAILABLE:
+        # Add Video Preview Tab
+        try:
+            from ui.components.video_preview_tab import VideoPreviewTab
             self.video_preview_tab = VideoPreviewTab(self.notebook, self)
+            print("✅ Video Preview tab loaded successfully")
+        except ImportError as e:
+            print(f"⚠️ Video Preview tab not available: {e}")
+            # Create a placeholder or continue without it
     
     def load_config(self):
         """
@@ -329,12 +322,7 @@ class CaptionCraftStudio(ctk.CTk):
         self.editor_tab.set_text(text)
     
     def update_preview(self, content: str):
-        """
-        Update preview tab with generated content.
-        
-        Args:
-            content (str): Content to display in preview tab
-        """
+        """Update preview tab with generated content"""
         self.preview_tab.update_preview(content)
         
         # Also update video preview if available
@@ -342,9 +330,7 @@ class CaptionCraftStudio(ctk.CTk):
             self.video_preview_tab.update_preview(vtt_content=content)
 
     def process_media_file(self, file_path: str):
-        """
-        Enhanced media processing with PROPER TIMING using Whisper segments
-        """
+        """Enhanced media processing that also updates video preview"""
         try:
             self.status_bar.show_progress("Starting media processing...")
             
@@ -371,7 +357,7 @@ class CaptionCraftStudio(ctk.CTk):
                         self.set_subtitle_text(vtt_content)
                         self.update_preview(vtt_content)
                         
-                        # Update video preview with the loaded video
+                        # UPDATE VIDEO PREVIEW WITH LOADED VIDEO
                         if hasattr(self, 'video_preview_tab') and self.video_preview_tab:
                             self.video_preview_tab.update_preview(video_path=file_path, vtt_content=vtt_content)
                         
@@ -384,7 +370,7 @@ class CaptionCraftStudio(ctk.CTk):
                 except Exception as e:
                     print(f"⚠️ Whisper failed, falling back: {e}")
             
-            # FALLBACK: Use MoviePy with SIMULATED timing
+            # FALLBACK: Use MoviePy with simulated timing
             self.status_bar.update_progress(0.4, "Using fallback transcription...")
             from core.audio_processor.audio_extractor import AudioExtractor
             extractor = AudioExtractor()
@@ -396,18 +382,26 @@ class CaptionCraftStudio(ctk.CTk):
             # Extract and transcribe audio
             self.status_bar.update_progress(0.6, "Extracting audio...")
             audio_path = extractor.extract_audio_from_video(file_path)
-            transcription = extractor.transcribe_audio(audio_path)
+            
+            # UPDATED: Use beginning-focused transcription with fallback
+            try:
+                transcription = extractor.transcribe_with_beginning_focus(audio_path)
+                print("🔊 Used specialized beginning-focused transcription")
+            except Exception as e:
+                print(f"⚠️ Beginning focus failed, using regular: {e}")
+                transcription = extractor.transcribe_audio(audio_path)
+            
             duration = extractor.get_audio_duration(audio_path)
             
-            # Convert to VTT with SIMULATED timing (better than one block)
+            # Convert to VTT with simulated timing
             self.status_bar.update_progress(0.8, "Creating subtitles with timing...")
             vtt_content = self._convert_text_to_timed_vtt(transcription, duration)
             
-            # Load into editor
+            # Load into editor and update previews
             self.set_subtitle_text(vtt_content)
             self.update_preview(vtt_content)
             
-            # Update video preview with the loaded video
+            # UPDATE VIDEO PREVIEW WITH LOADED VIDEO
             if hasattr(self, 'video_preview_tab') and self.video_preview_tab:
                 self.video_preview_tab.update_preview(video_path=file_path, vtt_content=vtt_content)
             
@@ -461,11 +455,15 @@ class CaptionCraftStudio(ctk.CTk):
         # Split text into sentences or reasonable chunks
         sentences = self._split_into_subtitles(text)
         
+        print(f"🔍 Split text into {len(sentences)} segments")
+        
         # Calculate time per chunk
         if sentences:
             time_per_chunk = total_duration / len(sentences)
         else:
-            time_per_chunk = total_duration
+            # Fallback to simple word-based splitting
+            print("⚠️ No sentences found, using word-based fallback")
+            return self._convert_text_to_vtt_fallback(text, total_duration)
         
         for i, sentence in enumerate(sentences):
             if sentence.strip():
@@ -483,27 +481,68 @@ class CaptionCraftStudio(ctk.CTk):
 
     def _split_into_subtitles(self, text: str) -> list:
         """
-        Split text into subtitle-friendly chunks.
+        Split text into subtitle-friendly chunks - SIMPLE AND RELIABLE VERSION
         """
-        # Simple sentence splitting
-        sentences = re.split(r'[.!?]+', text)
+        if not text or not text.strip():
+            print("⚠️ Empty text provided to subtitle splitter")
+            return []
         
-        # Filter empty sentences and clean up
+        print(f"📝 Original text length: {len(text)} characters")
+        
+        # SIMPLE APPROACH: Split by sentences first, then by word count
+        sentences = re.split(r'[.!?]+', text)
         sentences = [s.strip() for s in sentences if s.strip()]
         
-        # Further split long sentences
+        print(f"📝 Found {len(sentences)} sentences")
+        
+        # Further split into subtitle-friendly chunks
         result = []
         for sentence in sentences:
             words = sentence.split()
-            if len(words) <= 15:  # Reasonable subtitle length
+            if len(words) <= 10:  # Reasonable subtitle length
                 result.append(sentence)
             else:
-                # Split long sentences into chunks
-                chunks = [words[i:i+10] for i in range(0, len(words), 10)]
+                # Split long sentences into chunks of 6-8 words
+                chunks = [words[i:i+7] for i in range(0, len(words), 7)]
                 for chunk in chunks:
-                    result.append(' '.join(chunk))
+                    if chunk:  # Ensure chunk is not empty
+                        result.append(' '.join(chunk))
         
+        print(f"📝 Final segments: {len(result)}")
         return result
+
+    def _convert_text_to_vtt_fallback(self, text: str, total_duration: float) -> str:
+        """
+        Fallback method that uses simple word-based splitting
+        """
+        print("🔄 Using word-based fallback VTT conversion")
+        vtt_content = "WEBVTT\n\n"
+        
+        # Simple word-based splitting that we know works
+        words = text.split()
+        if not words:
+            print("❌ No words found in transcription")
+            return "WEBVTT\n\n1\n00:00:00.000 --> 00:00:01.000\nNo transcription available\n"
+        
+        # Split into chunks of ~8 words for better timing
+        chunks = [words[i:i+8] for i in range(0, len(words), 8)]
+        time_per_chunk = total_duration / len(chunks) if chunks else total_duration
+        
+        print(f"🔄 Created {len(chunks)} chunks from {len(words)} words")
+        
+        for i, chunk_words in enumerate(chunks):
+            if chunk_words:
+                start_time = i * time_per_chunk
+                end_time = (i + 1) * time_per_chunk
+                end_time = min(end_time, total_duration)
+                
+                chunk_text = ' '.join(chunk_words)
+                
+                vtt_content += f"{i + 1}\n"
+                vtt_content += f"{self._format_timestamp(start_time)} --> {self._format_timestamp(end_time)}\n"
+                vtt_content += f"{chunk_text}\n\n"
+        
+        return vtt_content
 
     def _format_timestamp(self, seconds: float) -> str:
         """
